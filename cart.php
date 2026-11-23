@@ -1,5 +1,5 @@
 <?php
-// cart.php - Shopping Cart & Checkout Simulation (Modern Card UI & Mobile Compatible)
+// cart.php - Shopping Cart & Checkout Simulation (With (-) and (+) Quantity Controls)
 session_start();
 require_once 'db_connect.php';
 
@@ -13,12 +13,58 @@ if (isset($_GET['action']) && $_GET['action'] == 'add') {
     $product_id = intval($_GET['id']);
     $qty = isset($_POST['quantity']) ? intval($_POST['quantity']) : 1;
 
-    if (isset($_SESSION['cart'][$product_id])) {
-        $_SESSION['cart'][$product_id] += $qty;
+    // Check available stock before adding
+    $stmt = $conn->prepare("SELECT stock_quantity FROM products WHERE product_id = ?");
+    $stmt->bind_param("i", $product_id);
+    $stmt->execute();
+    $res = $stmt->get_result()->fetch_assoc();
+
+    if ($res && $res['stock_quantity'] > 0) {
+        $current_qty = $_SESSION['cart'][$product_id] ?? 0;
+        if ($current_qty + $qty <= $res['stock_quantity']) {
+            $_SESSION['cart'][$product_id] = $current_qty + $qty;
+            header("Location: cart.php?msg=added");
+        } else {
+            $_SESSION['cart'][$product_id] = $res['stock_quantity'];
+            header("Location: cart.php?msg=max_stock");
+        }
     } else {
-        $_SESSION['cart'][$product_id] = $qty;
+        header("Location: catalog.php?msg=out_of_stock");
     }
-    header("Location: cart.php?msg=added");
+    exit();
+}
+
+// Handle Increase (+) quantity action
+if (isset($_GET['action']) && $_GET['action'] == 'increase') {
+    $product_id = intval($_GET['id']);
+    if (isset($_SESSION['cart'][$product_id])) {
+        $stmt = $conn->prepare("SELECT stock_quantity FROM products WHERE product_id = ?");
+        $stmt->bind_param("i", $product_id);
+        $stmt->execute();
+        $res = $stmt->get_result()->fetch_assoc();
+
+        if ($res && $_SESSION['cart'][$product_id] < $res['stock_quantity']) {
+            $_SESSION['cart'][$product_id]++;
+            header("Location: cart.php?msg=updated");
+        } else {
+            header("Location: cart.php?msg=max_stock");
+        }
+    }
+    exit();
+}
+
+// Handle Decrease (-) quantity action
+if (isset($_GET['action']) && $_GET['action'] == 'decrease') {
+    $product_id = intval($_GET['id']);
+    if (isset($_SESSION['cart'][$product_id])) {
+        $_SESSION['cart'][$product_id]--;
+        if ($_SESSION['cart'][$product_id] <= 0) {
+            unset($_SESSION['cart'][$product_id]);
+            header("Location: cart.php?msg=removed");
+        } else {
+            header("Location: cart.php?msg=updated");
+        }
+    }
     exit();
 }
 
@@ -114,6 +160,48 @@ if (isset($_GET['action']) && $_GET['action'] == 'clear') {
             box-shadow: 0 6px 15px rgba(0,0,0,0.08);
         }
         .product-img { width: 64px; height: 64px; object-fit: cover; border-radius: 12px; border: 2px solid #fff; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        
+        /* Quantity Stepper Styling */
+        .qty-control {
+            display: inline-flex;
+            align-items: center;
+            background: #f1f5f9;
+            border: 1px solid #cbd5e1;
+            border-radius: 50px;
+            padding: 2px;
+        }
+        .btn-qty {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 0.95rem;
+            border: none;
+            background: #ffffff;
+            color: var(--primary-blue);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+            text-decoration: none;
+            transition: all 0.15s ease;
+        }
+        .btn-qty:hover:not(.disabled) {
+            background: var(--primary-blue);
+            color: #ffffff;
+        }
+        .btn-qty.disabled {
+            opacity: 0.45;
+            pointer-events: none;
+            cursor: not-allowed;
+        }
+        .qty-value {
+            min-width: 34px;
+            text-align: center;
+            font-weight: 700;
+            font-size: 0.92rem;
+            color: #1e293b;
+        }
     </style>
 </head>
 <body class="d-flex flex-column min-vh-100">
@@ -149,6 +237,8 @@ if (isset($_GET['action']) && $_GET['action'] == 'clear') {
                 <i class="bi bi-info-circle-fill me-2"></i>
                 <?php
                     if ($_GET['msg'] == 'added') echo "Product successfully added to your cart!";
+                    if ($_GET['msg'] == 'updated') echo "Cart quantity updated.";
+                    if ($_GET['msg'] == 'max_stock') echo "Maximum available stock reached for this item.";
                     if ($_GET['msg'] == 'removed') echo "Item removed from cart.";
                     if ($_GET['msg'] == 'cleared') echo "Shopping cart cleared.";
                 ?>
@@ -185,6 +275,7 @@ if (isset($_GET['action']) && $_GET['action'] == 'clear') {
                             if ($product):
                                 $subtotal = $product['price'] * $qty;
                                 $grand_total += $subtotal;
+                                $at_max_stock = ($qty >= $product['stock_quantity']);
                         ?>
                             <div class="cart-item-card d-flex flex-column flex-sm-row align-items-center justify-content-between gap-3">
                                 <div class="d-flex align-items-center gap-3 w-100">
@@ -192,15 +283,26 @@ if (isset($_GET['action']) && $_GET['action'] == 'clear') {
                                     <div>
                                         <h6 class="fw-bold mb-1" style="color: #1800ad;"><?php echo htmlspecialchars($product['product_name']); ?></h6>
                                         <span class="badge rounded-pill bg-light text-secondary border mb-1" style="font-size: 0.7rem;"><?php echo htmlspecialchars($product['category']); ?></span>
-                                        <div class="small text-muted">Price: ₱<?php echo number_format($product['price'], 2); ?></div>
+                                        <div class="small text-muted">
+                                            Price: ₱<?php echo number_format($product['price'], 2); ?> 
+                                            <span class="ms-2 text-secondary">(Available: <?php echo $product['stock_quantity']; ?>)</span>
+                                        </div>
                                     </div>
                                 </div>
-                                <div class="d-flex align-items-center justify-content-between justify-content-sm-end gap-4 w-100 w-sm-auto border-top border-sm-top-0 pt-2 pt-sm-0">
+                                <div class="d-flex align-items-center justify-content-between justify-content-sm-end gap-3 gap-md-4 w-100 w-sm-auto border-top border-sm-top-0 pt-2 pt-sm-0">
                                     <div class="text-center">
-                                        <small class="text-muted d-block" style="font-size: 0.7rem;">Quantity</small>
-                                        <span class="badge bg-secondary px-2.5 py-1"><?php echo $qty; ?></span>
+                                        <small class="text-muted d-block mb-1" style="font-size: 0.7rem;">Quantity</small>
+                                        <div class="qty-control">
+                                            <a href="cart.php?action=decrease&id=<?php echo $pid; ?>" class="btn-qty" title="Decrease quantity" aria-label="Decrease quantity">
+                                                <i class="bi bi-dash"></i>
+                                            </a>
+                                            <span class="qty-value"><?php echo $qty; ?></span>
+                                            <a href="cart.php?action=increase&id=<?php echo $pid; ?>" class="btn-qty <?php echo $at_max_stock ? 'disabled' : ''; ?>" title="Increase quantity" aria-label="Increase quantity">
+                                                <i class="bi bi-plus"></i>
+                                            </a>
+                                        </div>
                                     </div>
-                                    <div class="text-end">
+                                    <div class="text-end" style="min-width: 95px;">
                                         <small class="text-muted d-block" style="font-size: 0.7rem;">Subtotal</small>
                                         <span class="fw-bold text-success">₱<?php echo number_format($subtotal, 2); ?></span>
                                     </div>
