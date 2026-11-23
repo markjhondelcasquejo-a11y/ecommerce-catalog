@@ -67,7 +67,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                         <form method="POST" action="checkout.php">
                             <div class="mb-3">
                                 <label class="form-label fw-semibold small">Full Name</label>
-                                <input type="text" name="fullname" class="form-control rounded-pill py-2 px-3" required placeholder="John Mark Bangud">
+                                <input type="text" name="fullname" class="form-control rounded-pill py-2 px-3" required placeholder="Mark Jhondel R. Casquejo">
                             </div>
                             <div class="mb-3">
                                 <label class="form-label fw-semibold small">Delivery Address</label>
