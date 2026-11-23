@@ -58,7 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     <?php if ($order_placed): ?>
                         <div class="text-center py-4">
                             <i class="bi bi-check-circle-fill text-success display-1 mb-3"></i>
-                            <h3 class="fw-bold mb-3 fs-4" style="color: #1800ad;">Order Placed Successfully!</h3>
+                            <h3 class="fw-bold mb-3 fs-4" style="color: #1800ad;">Order Placed Successfully!</h3><h3 class="fw-bold mb-2 fs-4" style="color: #1800ad;">Order #<?php echo htmlspecialchars((string)$placed_order_id); ?> Placed!</h3>
                             <p class="text-muted mb-4 small">Thank you for your purchase. Your simulated order has been recorded and will be processed for delivery.</p>
                             <a href="catalog.php" class="btn btn-gold px-5 py-2.5 rounded-pill fw-bold shadow w-100 w-md-auto">Return to Catalog</a>
                         </div>
