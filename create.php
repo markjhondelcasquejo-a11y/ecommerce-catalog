@@ -1,5 +1,5 @@
 <?php
-// create.php - Add New Product Form (Modern UI & Mobile Compatible Edition)
+// create.php - Add New Product Form with Supplier Cost & Live Unit Profit Preview
 require_once 'db_connect.php';
 session_start();
 
@@ -8,6 +8,7 @@ $errors = [];
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $product_name   = trim($_POST['product_name'] ?? '');
     $category       = trim($_POST['category'] ?? '');
+    $supplier_cost  = trim($_POST['supplier_cost'] ?? '0');
     $price          = trim($_POST['price'] ?? '');
     $stock_quantity = trim($_POST['stock_quantity'] ?? '');
     $image_url      = trim($_POST['image_url'] ?? '');
@@ -15,7 +16,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
     if (empty($product_name)) $errors[] = "Product name is required.";
     if (empty($category)) $errors[] = "Please select a category.";
-    if (!is_numeric($price) || $price < 0) $errors[] = "Valid price is required.";
+    if (!is_numeric($supplier_cost) || $supplier_cost < 0) $errors[] = "Valid supplier cost is required.";
+    if (!is_numeric($price) || $price < 0) $errors[] = "Valid selling price is required.";
     if (!is_numeric($stock_quantity) || $stock_quantity < 0) $errors[] = "Valid stock quantity is required.";
     if (empty($description)) $errors[] = "Product description is required.";
 
@@ -24,11 +26,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     }
 
     if (empty($errors)) {
+        $cost_val  = (float)$supplier_cost;
         $price_val = (float)$price;
         $stock_val = (int)$stock_quantity;
 
-        $stmt = $conn->prepare("INSERT INTO products (product_name, category, price, stock_quantity, image_url, description) VALUES (?, ?, ?, ?, ?, ?)");
-        $stmt->bind_param("ssdiss", $product_name, $category, $price_val, $stock_val, $image_url, $description);
+        $stmt = $conn->prepare("INSERT INTO products (product_name, category, price, supplier_cost, stock_quantity, image_url, description) VALUES (?, ?, ?, ?, ?, ?, ?)");
+        $stmt->bind_param("ssddiss", $product_name, $category, $price_val, $cost_val, $stock_val, $image_url, $description);
 
         if ($stmt->execute()) {
             $stmt->close();
@@ -142,6 +145,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             font-size: 0.88rem;
         }
 
+        .profit-preview-box {
+            background: rgba(24, 0, 173, 0.06);
+            border: 1px dashed rgba(24, 0, 173, 0.28);
+            border-radius: 12px;
+        }
+
         .live-clock-badge {
             background: rgba(255, 255, 255, 0.15);
             border: 1px solid rgba(255, 255, 255, 0.3);
@@ -203,13 +212,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
                     <div class="card-body p-4 p-md-5">
                         <form method="POST" action="create.php">
-                            <div class="mb-3">
-                                <label class="form-label">Product Name *</label>
-                                <input type="text" name="product_name" class="form-control" required placeholder="e.g., Wireless Bluetooth Headphones" value="<?php echo htmlspecialchars($_POST['product_name'] ?? ''); ?>">
-                            </div>
-
                             <div class="row g-3 mb-3">
-                                <div class="col-12 col-md-6">
+                                <div class="col-12 col-md-7">
+                                    <label class="form-label">Product Name *</label>
+                                    <input type="text" name="product_name" class="form-control" required placeholder="e.g., Wireless Bluetooth Headphones" value="<?php echo htmlspecialchars($_POST['product_name'] ?? ''); ?>">
+                                </div>
+                                <div class="col-12 col-md-5">
                                     <label class="form-label">Category *</label>
                                     <select name="category" class="form-select" required>
                                         <option value="">Select category</option>
@@ -220,14 +228,28 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                                         <option value="Sports & Outdoors" <?php if(($_POST['category'] ?? '') == 'Sports & Outdoors') echo 'selected'; ?>>Sports & Outdoors</option>
                                     </select>
                                 </div>
-                                <div class="col-6 col-md-3">
-                                    <label class="form-label">Price (₱) *</label>
-                                    <input type="number" step="0.01" name="price" class="form-control" required placeholder="0.00" value="<?php echo htmlspecialchars($_POST['price'] ?? ''); ?>">
+                            </div>
+
+                            <div class="row g-3 mb-3">
+                                <div class="col-12 col-sm-4">
+                                    <label class="form-label">Supplier Cost (₱) *</label>
+                                    <input type="number" step="0.01" min="0" name="supplier_cost" id="supplier_cost" class="form-control" required placeholder="0.00" value="<?php echo htmlspecialchars($_POST['supplier_cost'] ?? '0.00'); ?>">
                                 </div>
-                                <div class="col-6 col-md-3">
+                                <div class="col-6 col-sm-4">
+                                    <label class="form-label">Selling Price (₱) *</label>
+                                    <input type="number" step="0.01" min="0" name="price" id="selling_price" class="form-control" required placeholder="0.00" value="<?php echo htmlspecialchars($_POST['price'] ?? ''); ?>">
+                                </div>
+                                <div class="col-6 col-sm-4">
                                     <label class="form-label">Stock Qty *</label>
-                                    <input type="number" name="stock_quantity" class="form-control" required placeholder="0" value="<?php echo htmlspecialchars($_POST['stock_quantity'] ?? ''); ?>">
+                                    <input type="number" min="0" name="stock_quantity" class="form-control" required placeholder="0" value="<?php echo htmlspecialchars($_POST['stock_quantity'] ?? ''); ?>">
                                 </div>
+                            </div>
+
+                            <div class="profit-preview-box p-3 mb-3 d-flex justify-content-between align-items-center">
+                                <span class="small fw-semibold text-secondary">
+                                    <i class="bi bi-calculator me-1 text-primary"></i>Estimated Profit per Unit:
+                                </span>
+                                <span class="fw-bold fs-6 text-success" id="unit-profit-preview">₱0.00</span>
                             </div>
 
                             <div class="mb-3">
@@ -272,6 +294,30 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         }
         setInterval(updateClock, 1000);
         updateClock();
+
+        (function () {
+            const costInput = document.getElementById('supplier_cost');
+            const priceInput = document.getElementById('selling_price');
+            const previewEl = document.getElementById('unit-profit-preview');
+
+            function updateProfitPreview() {
+                const cost = parseFloat(costInput.value) || 0;
+                const price = parseFloat(priceInput.value) || 0;
+                const profit = price - cost;
+                previewEl.textContent = '₱' + profit.toLocaleString('en-US', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                });
+                previewEl.classList.toggle('text-success', profit >= 0);
+                previewEl.classList.toggle('text-danger', profit < 0);
+            }
+
+            if (costInput && priceInput && previewEl) {
+                costInput.addEventListener('input', updateProfitPreview);
+                priceInput.addEventListener('input', updateProfitPreview);
+                updateProfitPreview();
+            }
+        })();
     </script>
 </body>
 </html>
