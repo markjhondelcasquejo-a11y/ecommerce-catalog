@@ -1,10 +1,21 @@
 <?php
-// catalog.php - Main Dashboard (Modern Card-Based User Friendly UI & Mobile Compatible)
+// catalog.php - Main Dashboard with Right-Click "Clear" on Earned Profit
 require_once 'db_connect.php';
 session_start();
 
 if (!isset($_SESSION['cart'])) {
     $_SESSION['cart'] = [];
+}
+
+// Handle POST request from right-click "Clear" popup on Earned Profit
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'clear_profit') {
+    mysqli_query($conn, "SET FOREIGN_KEY_CHECKS = 0");
+    mysqli_query($conn, "TRUNCATE TABLE order_items");
+    mysqli_query($conn, "TRUNCATE TABLE orders");
+    mysqli_query($conn, "SET FOREIGN_KEY_CHECKS = 1");
+
+    header("Location: catalog.php?msg=profit_reset");
+    exit();
 }
 
 // Handle Search and Category Filter
@@ -40,8 +51,15 @@ $stmt->execute();
 $result = $stmt->get_result();
 
 // Summary Metrics Query
-$stats_query = mysqli_query($conn, "SELECT COUNT(*) as total_items, SUM(stock_quantity) as total_stock, SUM(price * stock_quantity) as total_value FROM products");
+$stats_query = mysqli_query($conn, "SELECT COUNT(*) as total_items, COALESCE(SUM(stock_quantity), 0) as total_stock, COALESCE(SUM(price * stock_quantity), 0) as total_value FROM products");
 $stats = mysqli_fetch_assoc($stats_query);
+
+// Earned Profit from orders table (defaults to 0.00 if table/column isn't present yet)
+$earned_profit = 0.00;
+$profit_query = @mysqli_query($conn, "SELECT COALESCE(SUM(total_profit), 0) as earned_profit FROM orders");
+if ($profit_query && ($profit_row = mysqli_fetch_assoc($profit_query))) {
+    $earned_profit = (float)$profit_row['earned_profit'];
+}
 ?>
 
 <!DOCTYPE html>
@@ -73,7 +91,6 @@ $stats = mysqli_fetch_assoc($stats_query);
             color: #1e293b;
         }
 
-        /* Frosted Glass Navbar */
         .navbar-custom {
             background: rgba(24, 0, 173, 0.94) !important;
             backdrop-filter: blur(16px);
@@ -94,7 +111,6 @@ $stats = mysqli_fetch_assoc($stats_query);
             color: #ffffff !important;
         }
 
-        /* Glassmorphism Containers */
         .glass-panel {
             background: var(--glass-bg);
             backdrop-filter: blur(18px);
@@ -114,7 +130,6 @@ $stats = mysqli_fetch_assoc($stats_query);
             padding: 1.1rem 1.35rem;
         }
 
-        /* Stat Cards */
         .card-stat {
             border: 1px solid rgba(255, 255, 255, 0.7);
             border-radius: 16px;
@@ -142,6 +157,12 @@ $stats = mysqli_fetch_assoc($stats_query);
             color: #ffffff;
             border-bottom: 4px solid var(--accent-gold);
         }
+        .stat-profit {
+            background: linear-gradient(135deg, rgba(13, 110, 71, 0.95), rgba(22, 156, 101, 0.96));
+            color: #ffffff;
+            border-bottom: 4px solid var(--accent-gold);
+            cursor: context-menu;
+        }
         .stat-label {
             font-size: 0.72rem;
             letter-spacing: 0.5px;
@@ -156,7 +177,6 @@ $stats = mysqli_fetch_assoc($stats_query);
             .stat-value { font-size: 1.6rem; }
         }
 
-        /* Product Card UI */
         .product-card {
             background: rgba(255, 255, 255, 0.92);
             border: 1px solid rgba(255, 255, 255, 0.9);
@@ -199,7 +219,6 @@ $stats = mysqli_fetch_assoc($stats_query);
             flex-grow: 1;
         }
 
-        /* Buttons & Actions */
         .btn-gold {
             background: linear-gradient(135deg, #e5b524, #d49b0c);
             border: none;
@@ -252,22 +271,55 @@ $stats = mysqli_fetch_assoc($stats_query);
             padding: 0.35rem 0.75rem;
             border-radius: 10px;
         }
+
+        #profit-context-menu {
+            display: none;
+            position: fixed;
+            z-index: 9999;
+            min-width: 145px;
+            padding: 6px;
+            border-radius: 12px;
+            background: rgba(18, 22, 58, 0.95);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(229, 181, 36, 0.55);
+            box-shadow: 0 12px 28px rgba(0, 0, 0, 0.38);
+        }
+
+        #clear-profit-btn {
+            width: 100%;
+            border: none;
+            background: rgba(229, 181, 36, 0.16);
+            color: #ffd54f;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            font-weight: 700;
+            text-align: left;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+        }
+
+        #clear-profit-btn:hover {
+            background: rgba(229, 181, 36, 0.3);
+        }
     </style>
 </head>
 <body class="d-flex flex-column min-vh-100">
 
-    <!-- Responsive Navigation Bar with Mobile Hamburger Toggle -->
     <nav class="navbar navbar-expand-lg navbar-dark navbar-custom sticky-top">
         <div class="container-fluid px-3">
             <a class="navbar-brand fw-bold d-flex align-items-center" href="index.php">
                 <img src="ECC_logo.png" alt="Logo" class="navbar-logo me-2" onerror="this.src='https://via.placeholder.com/38?text=ECC'">
                 <span class="navbar-brand-text">E-Commerce Catalog</span>
             </a>
-            
+
             <button class="navbar-toggler border-0 shadow-none text-light" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
             </button>
-            
+
             <div class="collapse navbar-collapse justify-content-end mt-2 mt-lg-0" id="navbarNav">
                 <div class="d-flex flex-column flex-lg-row align-items-lg-center gap-2">
                     <div class="live-clock-badge d-none d-xl-flex align-items-center">
@@ -277,7 +329,7 @@ $stats = mysqli_fetch_assoc($stats_query);
 
                     <a class="nav-link text-light px-2 fw-semibold" href="index.php"><i class="bi bi-house-door me-1"></i>Home</a>
                     <a class="nav-link active fw-bold text-warning px-2" href="catalog.php"><i class="bi bi-grid me-1"></i>Catalog</a>
-                    
+
                     <a class="btn btn-gold px-3 py-1.5 rounded-pill fw-bold text-nowrap" href="cart.php">
                         <i class="bi bi-cart-fill me-1"></i> Cart (<?php echo array_sum($_SESSION['cart']); ?>)
                     </a>
@@ -290,9 +342,8 @@ $stats = mysqli_fetch_assoc($stats_query);
         </div>
     </nav>
 
-    <!-- Main Container -->
     <div class="container py-4 flex-grow-1">
-        
+
         <?php if (isset($_GET['msg'])): ?>
             <div class="alert alert-warning alert-dismissible fade show shadow-sm border-0 text-dark fw-bold rounded-3 p-3 mb-3" role="alert">
                 <i class="bi bi-bell-fill me-2"></i>
@@ -300,6 +351,8 @@ $stats = mysqli_fetch_assoc($stats_query);
                     if ($_GET['msg'] == 'added') echo "Success! New product added to catalog.";
                     if ($_GET['msg'] == 'updated') echo "Updated! Product details have been saved.";
                     if ($_GET['msg'] == 'deleted') echo "Deleted! Product removed from catalog.";
+                    if ($_GET['msg'] == 'out_of_stock') echo "This product is currently out of stock.";
+                    if ($_GET['msg'] == 'profit_reset') echo "Cleared! Order history has been wiped and Earned Profit is now ₱0.00.";
                 ?>
                 <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
             </div>
@@ -307,7 +360,7 @@ $stats = mysqli_fetch_assoc($stats_query);
 
         <!-- Stacked Summary Cards -->
         <div class="row g-3 mb-4">
-            <div class="col-12 col-md-4">
+            <div class="col-12 col-sm-6 col-lg-3">
                 <div class="card card-stat stat-royal">
                     <div class="card-body p-3 text-center text-md-start">
                         <span class="text-uppercase opacity-75 d-block mb-1 stat-label">Total Products</span>
@@ -315,7 +368,7 @@ $stats = mysqli_fetch_assoc($stats_query);
                     </div>
                 </div>
             </div>
-            <div class="col-12 col-md-4">
+            <div class="col-12 col-sm-6 col-lg-3">
                 <div class="card card-stat stat-gold">
                     <div class="card-body p-3 text-center text-md-start">
                         <span class="text-uppercase fw-bold d-block mb-1 stat-label" style="color: #1800ad; opacity: 0.85;">Units in Stock</span>
@@ -323,11 +376,19 @@ $stats = mysqli_fetch_assoc($stats_query);
                     </div>
                 </div>
             </div>
-            <div class="col-12 col-md-4">
+            <div class="col-12 col-sm-6 col-lg-3">
                 <div class="card card-stat stat-dark">
                     <div class="card-body p-3 text-center text-md-start">
                         <span class="text-uppercase opacity-75 d-block mb-1 stat-label">Catalog Value</span>
                         <h3 class="mb-0 text-warning stat-value">₱<?php echo number_format($stats['total_value'] ?? 0, 2); ?></h3>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12 col-sm-6 col-lg-3">
+                <div class="card card-stat stat-profit" id="profit-stat-card">
+                    <div class="card-body p-3 text-center text-md-start">
+                        <span class="text-uppercase opacity-75 d-block mb-1 stat-label"><i class="bi bi-graph-up-arrow me-1 text-warning"></i>Earned Profit</span>
+                        <h3 class="mb-0 text-warning stat-value">₱<?php echo number_format($earned_profit, 2); ?></h3>
                     </div>
                 </div>
             </div>
@@ -430,17 +491,24 @@ $stats = mysqli_fetch_assoc($stats_query);
         </div>
     </div>
 
-    <!-- Footer -->
     <footer class="text-center py-3 mt-auto" style="background: rgba(10, 0, 70, 0.9); color: #ffffff; border-top: 2px solid rgba(229, 181, 36, 0.4);">
         <div class="container">
             <small class="opacity-75" style="font-size: 0.8rem;">E-Commerce Product Catalog &bull; Developed by <strong class="text-warning">Mark Jhondel Casquejo</strong></small>
         </div>
     </footer>
 
-    <!-- Bootstrap 5 JS Bundle -->
+    <!-- Right-Click Context Popup for Earned Profit -->
+    <div id="profit-context-menu" role="menu">
+        <form id="clear-profit-form" action="catalog.php" method="POST" class="m-0">
+            <input type="hidden" name="action" value="clear_profit">
+            <button type="submit" id="clear-profit-btn">
+                <i class="bi bi-trash3"></i>
+                <span>Clear</span>
+            </button>
+        </form>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-    
-    <!-- Real-time Clock Script -->
     <script>
         function updateClock() {
             const now = new Date();
@@ -449,6 +517,41 @@ $stats = mysqli_fetch_assoc($stats_query);
         }
         setInterval(updateClock, 1000);
         updateClock();
+
+        (function () {
+            const profitCard = document.getElementById('profit-stat-card');
+            const contextMenu = document.getElementById('profit-context-menu');
+            const clearForm = document.getElementById('clear-profit-form');
+            if (!profitCard || !contextMenu || !clearForm) return;
+
+            profitCard.addEventListener('contextmenu', function (e) {
+                e.preventDefault();
+                const x = Math.min(e.clientX, window.innerWidth - 155);
+                const y = Math.min(e.clientY, window.innerHeight - 60);
+                contextMenu.style.left = Math.max(10, x) + 'px';
+                contextMenu.style.top = Math.max(10, y) + 'px';
+                contextMenu.style.display = 'block';
+            });
+
+            document.addEventListener('click', function (e) {
+                if (!contextMenu.contains(e.target)) {
+                    contextMenu.style.display = 'none';
+                }
+            });
+
+            document.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape') {
+                    contextMenu.style.display = 'none';
+                }
+            });
+
+            clearForm.addEventListener('submit', function (e) {
+                contextMenu.style.display = 'none';
+                if (!confirm('Clear all order records and reset Earned Profit to ₱0.00?')) {
+                    e.preventDefault();
+                }
+            });
+        })();
     </script>
 </body>
 </html>

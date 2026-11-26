@@ -6,34 +6,37 @@ session_start();
 $errors = [];
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $product_name = trim($_POST['product_name']);
-    $category = trim($_POST['category']);
-    $price = trim($_POST['price']);
-    $stock_quantity = trim($_POST['stock_quantity']);
-    $image_url = trim($_POST['image_url']);
-    $description = trim($_POST['description']);
+    $product_name   = trim($_POST['product_name'] ?? '');
+    $category       = trim($_POST['category'] ?? '');
+    $price          = trim($_POST['price'] ?? '');
+    $stock_quantity = trim($_POST['stock_quantity'] ?? '');
+    $image_url      = trim($_POST['image_url'] ?? '');
+    $description    = trim($_POST['description'] ?? '');
 
-    // Validation
     if (empty($product_name)) $errors[] = "Product name is required.";
     if (empty($category)) $errors[] = "Please select a category.";
     if (!is_numeric($price) || $price < 0) $errors[] = "Valid price is required.";
     if (!is_numeric($stock_quantity) || $stock_quantity < 0) $errors[] = "Valid stock quantity is required.";
     if (empty($description)) $errors[] = "Product description is required.";
 
-    // Default image if empty
     if (empty($image_url)) {
-        $image_url = "https://via.placeholder.com/150?text=No+Image";
+        $image_url = "https://via.placeholder.com/300x180?text=No+Image";
     }
 
     if (empty($errors)) {
+        $price_val = (float)$price;
+        $stock_val = (int)$stock_quantity;
+
         $stmt = $conn->prepare("INSERT INTO products (product_name, category, price, stock_quantity, image_url, description) VALUES (?, ?, ?, ?, ?, ?)");
-        $stmt->bind_param("ssdiss", $product_name, $category, $price, $stock_quantity, $image_url, $description);
-        
+        $stmt->bind_param("ssdiss", $product_name, $category, $price_val, $stock_val, $image_url, $description);
+
         if ($stmt->execute()) {
+            $stmt->close();
             header("Location: catalog.php?msg=added");
             exit();
         } else {
-            $errors[] = "Database error: " . $conn->error;
+            $errors[] = "Database error: " . $stmt->error;
+            $stmt->close();
         }
     }
 }
@@ -45,11 +48,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Add Product - E-Commerce Product Catalog</title>
-    <!-- Bootstrap 5 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Bootstrap Icons -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
-    <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -68,7 +68,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             color: #1e293b;
         }
 
-        /* Frosted Glass Navbar */
         .navbar-custom {
             background: rgba(24, 0, 173, 0.94) !important;
             backdrop-filter: blur(16px);
@@ -89,7 +88,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             color: #ffffff !important;
         }
 
-        /* Glassmorphism Panel Container */
         .glass-panel {
             background: var(--glass-bg);
             backdrop-filter: blur(18px);
@@ -109,7 +107,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             padding: 1.1rem 1.35rem;
         }
 
-        /* Buttons */
         .btn-gold {
             background: linear-gradient(135deg, #e5b524, #d49b0c);
             border: none;
@@ -125,7 +122,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             color: #1800ad;
         }
 
-        /* Form Controls */
         .form-control, .form-select {
             background: rgba(255, 255, 255, 0.95) !important;
             border: 1px solid rgba(0, 0, 0, 0.1);
@@ -158,18 +154,17 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 </head>
 <body class="d-flex flex-column min-vh-100">
 
-    <!-- Frosted Glass Navigation Bar with Hamburger Toggle -->
     <nav class="navbar navbar-expand-lg navbar-dark navbar-custom sticky-top">
         <div class="container-fluid px-3">
             <a class="navbar-brand fw-bold d-flex align-items-center" href="index.php">
                 <img src="ECC_logo.png" alt="Logo" class="navbar-logo me-2" onerror="this.src='https://via.placeholder.com/38?text=ECC'">
                 <span class="navbar-brand-text">E-Commerce Catalog</span>
             </a>
-            
+
             <button class="navbar-toggler border-0 shadow-none text-light" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
             </button>
-            
+
             <div class="collapse navbar-collapse justify-content-end mt-2 mt-lg-0" id="navbarNav">
                 <div class="d-flex flex-column flex-lg-row align-items-lg-center gap-2">
                     <div class="live-clock-badge d-none d-xl-flex align-items-center">
@@ -186,16 +181,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         </div>
     </nav>
 
-    <!-- Main Container -->
     <div class="container py-4 flex-grow-1">
         <div class="row justify-content-center">
             <div class="col-12 col-md-8 col-lg-7">
-                
+
                 <?php if (!empty($errors)): ?>
                     <div class="alert alert-danger shadow-sm rounded-3 p-3 mb-4">
                         <ul class="mb-0 small">
                             <?php foreach ($errors as $err): ?>
-                                <li><?php echo $err; ?></li>
+                                <li><?php echo htmlspecialchars($err); ?></li>
                             <?php endforeach; ?>
                         </ul>
                     </div>
@@ -206,14 +200,14 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                         <h5 class="mb-0 fw-bold fs-5"><i class="bi bi-plus-circle-fill me-2 text-warning"></i>Add New Product</h5>
                         <a href="catalog.php" class="btn btn-sm btn-outline-light rounded-pill px-3">Cancel</a>
                     </div>
-                    
+
                     <div class="card-body p-4 p-md-5">
                         <form method="POST" action="create.php">
                             <div class="mb-3">
                                 <label class="form-label">Product Name *</label>
                                 <input type="text" name="product_name" class="form-control" required placeholder="e.g., Wireless Bluetooth Headphones" value="<?php echo htmlspecialchars($_POST['product_name'] ?? ''); ?>">
                             </div>
-                            
+
                             <div class="row g-3 mb-3">
                                 <div class="col-12 col-md-6">
                                     <label class="form-label">Category *</label>
@@ -238,7 +232,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
                             <div class="mb-3">
                                 <label class="form-label">Product Image URL (Optional)</label>
-                                <input type="url" name="image_url" class="form-control" placeholder="https://example.com/image.jpg" value="<?php echo htmlspecialchars($_POST['image_url'] ?? ''); ?>">
+                                <input type="text" name="image_url" class="form-control" placeholder="https://example.com/image.jpg or ECC_logo.png" value="<?php echo htmlspecialchars($_POST['image_url'] ?? ''); ?>">
                             </div>
 
                             <div class="mb-4">
@@ -257,26 +251,22 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         </div>
     </div>
 
-    <!-- Frosted Footer -->
     <footer class="text-center py-3 mt-auto" style="background: rgba(10, 0, 70, 0.9); backdrop-filter: blur(10px); color: #ffffff; border-top: 2px solid rgba(229, 181, 36, 0.4);">
         <div class="container">
             <small class="opacity-75" style="font-size: 0.8rem;">E-Commerce Product Catalog &bull; Developed by <strong class="text-warning">Mark Jhondel Casquejo</strong></small>
         </div>
     </footer>
 
-    <!-- Bootstrap 5 JS Bundle -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-    
-    <!-- Real-time Clock Script -->
     <script>
         function updateClock() {
             const now = new Date();
-            const options = { 
-                weekday: 'short', 
-                month: 'short', 
-                day: 'numeric', 
-                hour: '2-digit', 
-                minute: '2-digit' 
+            const options = {
+                weekday: 'short',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
             };
             document.getElementById('liveClock').innerText = now.toLocaleDateString('en-US', options);
         }
